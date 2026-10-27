@@ -12,7 +12,8 @@ description: 현재 프로젝트에 AI Agent 개발용 하네스를 구축한다
 - **도메인 팀** — 프로젝트마다 다른 것: 대도메인 AI Agent 안의 세부 유형에 맞춘 `team-*` 에이전트와 워크플로 스킬. 이 스킬이 인터뷰를 거쳐 생성하고, 업데이트 때 보존한다.
 
 ## 원칙
-- 하네스는 개인 작업 도구다. 프로젝트의 `CLAUDE.md` 와 `settings.json` 은 건드리지 않고, `*.local.*` 파일과 `harness-`·`team-` 접두사 파일만 쓴다. 팀 저장소를 오염시키지 않기 위해서다.
+- 하네스는 나만 쓰는 개인 도구이고, 프로젝트는 팀이 함께 진행한다. 프로젝트의 `CLAUDE.md` 와 `settings.json` 은 건드리지 않고, `*.local.*` 파일과 `harness-`·`team-` 접두사 파일만 쓴다. 이 파일들은 `.git/info/exclude` 로 제외해 팀 저장소에 흔적을 남기지 않는다.
+- 하네스는 내 변경에만 작동한다 (HARNESS.md 의 "내 작업 범위"). 설정도 이 원칙에 맞춘다.
 - 코드에서 알 수 있는 것은 묻지 않는다. 코드로 알 수 없는 것(목표, 우선순위)만 묻는다.
 - context 문서와 팀 정의에는 코드에서 확인한 사실만 쓴다. 확인하지 못한 내용은 "확인 필요"로 남긴다.
 - 생성하는 모든 문서는 사용자가 대화에 쓰는 언어로 쓴다. 템플릿이 한국어라는 이유로 다른 언어 사용자에게 한국어 문서를 만들지 않는다.
@@ -41,14 +42,18 @@ description: 현재 프로젝트에 AI Agent 개발용 하네스를 구축한다
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File "{T}\install.ps1" -Target "<루트>"
 ```
-- 사용자가 `.gitignore` 를 건드리지 말라고 하면 `-UseExclude` 를 붙인다.
-- 출력의 `MODE`, `VERSION`, `ADDED_FILES`, `CONFIG_KEYS_ADDED`, `UNFILLED_CONTEXT` 를 확인한다. 버전이 바뀌었으면 `{T}\CHANGELOG.md` 의 해당 항목을 요약해 알린다.
+- 기본으로 `.git/info/exclude` 에 ignore 블록을 쓴다. git 저장소가 아니면 `.gitignore` 로 대신한다. 사용자가 `.gitignore` 에 넣기를 원할 때만 `-UseGitignore` 를 붙인다.
+- 출력의 `MODE`, `VERSION`, `ADDED_FILES`, `CONFIG_KEYS_ADDED`, `IGNORE`, `UNFILLED_CONTEXT` 를 확인한다. 버전이 바뀌었으면 `{T}\CHANGELOG.md` 의 해당 항목을 요약해 알린다.
+- `GITIGNORE_BLOCK_REMOVED` 가 있으면, 예전 버전이 `.gitignore` 에 넣었던 하네스 블록을 지웠다는 뜻이다. `.gitignore` 변경은 팀에 보이므로 사용자에게 알리고, 커밋할지는 사용자가 정하게 한다.
+- doctor.ps1 의 `tracked` 가 FAIL이면 하네스 파일이 이미 git에 들어가 있다. `git rm -r --cached <경로>` 로 추적을 끊자고 제안한다. 이 변경도 팀에 보이므로 사용자 확인을 받는다.
+- 저장소의 커밋 계정(`git config user.name`, `user.email`)을 확인해 보고한다. 비어 있거나 이 저장소에 맞지 않아 보이면(회사 저장소인데 개인 이메일 등) 알린다. git 계정 설정은 하네스가 바꾸지 않고, 사용자가 원할 때만 설정한다.
 
 ## 2. 프로젝트 분석
 `UNFILLED_CONTEXT` 에 있는 `project.md`, `architecture.md`, `conventions.md` 를 채운다.
 - 매니페스트, 진입점, 디렉터리 구조, 린터·포매터 설정, 기존 테스트를 실제로 읽는다. 코드베이스가 크면 영역별 탐색을 Explore 서브에이전트에 병렬로 맡기고 결론만 받는다.
 - 다 채우면 `harness:unfilled` 주석을 지운다.
-- `.harness/harness.config.json` 의 `format` / `lint` / `test` 를 실제로 있는 도구로 채우고 한 번씩 실행해 확인한다. 파일 단위 명령은 `{file}` 을 쓴다. 동작하지 않는 명령은 비워 두고 이유를 보고한다. 편집할 때마다 훅이 실패하기 때문이다.
+- `.harness/harness.config.json` 의 `format` / `lint` / `test` 를 실제로 있는 도구로 채우고 한 번씩 실행해 확인한다. 동작하지 않는 명령은 비워 두고 이유를 보고한다. 편집할 때마다 훅이 실패하기 때문이다.
+- `format` 과 `lint` 는 반드시 파일 단위로 쓴다 (`{file}`, 예: `npx prettier --write {file}`). 편집 훅은 `{file}` 이 없는 명령을 실행하지 않는다. 프로젝트 전체 format은 팀원 파일을 바꾸고, 전체 lint는 팀원 코드의 오류로 내 작업을 막기 때문이다.
 - `verifyOnStop` 은 테스트가 대략 30초 안에 끝날 때만 true로 제안한다.
 
 이 단계는 3단계 인터뷰를 기다리지 않아도 된다. 인터뷰 질문을 먼저 보내고, 답을 기다리는 동안 진행해도 좋다.
@@ -110,7 +115,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "{T}\install.ps1" -Target "<
    - 기록과 팀을 남기려면 `-KeepData` 를 붙인다.
 
 ## 결과 점검표
-- [ ] doctor.ps1 에 FAIL이 없다.
+- [ ] doctor.ps1 에 FAIL이 없다. 하네스 파일이 `.git/info/exclude` 로 제외되어 있고, git에 추적되는 하네스 파일이 없다.
+- [ ] `format` / `lint` 가 파일 단위(`{file}`)다.
 - [ ] context 문서와 domain.md 에 `harness:unfilled` 가 남아 있지 않다.
 - [ ] 코드에서 알 수 있는 것은 묻지 않았고, 인터뷰 답을 팀 구성에 반영했다.
 - [ ] 팀 에이전트는 기존 에이전트와 역할이 겹치지 않는다.

@@ -48,11 +48,20 @@ AI Agent를 개발하는 프로젝트에 붙이는 Claude Code 하네스의 원�
 스크립트를 직접 실행할 때 (공통 기반만 다룬다. 도메인 팀은 스킬이 만든다):
 
 ```powershell
-.\install.ps1   -Target C:\path\to\project               # .gitignore 에 등록
-.\install.ps1   -Target C:\path\to\project -UseExclude   # .git/info/exclude 에 등록
+.\install.ps1   -Target C:\path\to\project                 # .git/info/exclude 에 등록 (팀에 안 보임)
+.\install.ps1   -Target C:\path\to\project -UseGitignore   # .gitignore 에 등록 (커밋됨)
 .\doctor.ps1    -Target C:\path\to\project               # 설치 상태 점검 (읽기 전용)
 .\uninstall.ps1 -Target C:\path\to\project [-KeepData]
 ```
+
+## 나만 쓰는 하네스, 팀이 함께하는 프로젝트
+
+| 원칙 | 구현 |
+|---|---|
+| 하네스는 나만 쓴다 | 하네스 파일은 모두 `.git/info/exclude` 로 제외한다. 이 파일은 커밋되지 않으므로 팀 저장소에 흔적이 없다. doctor가 git에 추적되는 하네스 파일이 있는지 확인한다 |
+| 프로젝트는 팀이 함께 진행한다 | `CLAUDE.md`, `settings.json`, 팀의 에이전트·스킬은 건드리지 않는다. 팀 문서와 context 문서가 다르면 팀 문서가 우선이다 |
+| 하네스는 내 코드에서만 작동한다 | "내 변경" = 작업 트리 변경 + push하지 않은 내 커밋. 편집 훅은 편집한 파일에만 format·lint를 실행한다. 종료 훅은 내 변경이 있을 때만 돌고, 팀원 코드의 실패는 보고만 한다. reviewer·tester·verify도 같은 범위다 |
+| git은 일반적인 방식으로 쓴다 | 사용자가 요청할 때만 커밋·push한다. 공유 브랜치에 직접 push하지 않고, force push와 `--no-verify` 는 쓰지 않는다. 커밋 전에 하네스 파일이 staged 목록에 없는지 확인한다 |
 
 ## 작업 흐름
 
@@ -109,7 +118,7 @@ AI Agent를 개발하는 프로젝트에 붙이는 Claude Code 하네스의 원�
 │   ├── skills/team-*/             도메인 워크플로             (보존)
 │   └── settings.local.json        훅 등록 (기존 설정과 병합)
 ├── CLAUDE.local.md                .harness 문서 import 블록
-└── .gitignore                     위 경로를 묶은 ignore 블록
+└── .git/info/exclude              위 경로를 묶은 ignore 블록 (커밋되지 않음)
 ```
 
 - 프로젝트의 `CLAUDE.md` 와 `settings.json` 은 건드리지 않는다. `*.local.*` 파일과 `harness-`·`team-` 접두사 파일만 쓴다.
@@ -119,10 +128,10 @@ AI Agent를 개발하는 프로젝트에 붙이는 Claude Code 하네스의 원�
 
 | 키 | 의미 |
 |---|---|
-| `format` | 파일 편집 후 실행. 실패해도 무시한다. `{file}` 은 편집한 파일 경로 |
-| `lint` | 파일 편집 후 실행. 실패하면 출력이 Claude에게 전달돼 바로 고친다 |
+| `format` | 파일 편집 후 실행. 실패해도 무시한다. `{file}` 은 편집한 파일 경로. **`{file}` 이 없으면 훅이 실행하지 않는다** (팀원 파일까지 바꾸기 때문) |
+| `lint` | 파일 편집 후 실행. 실패하면 출력이 Claude에게 전달돼 바로 고친다. `{file}` 이 없으면 훅이 실행하지 않는다 |
 | `test` | `/harness-verify` 와 종료 훅에서 실행 |
-| `verifyOnStop` | true면 응답이 끝날 때마다 `test` 실행. 테스트가 30초 안쪽일 때만 권장 |
+| `verifyOnStop` | true면 응답이 끝날 때 `test` 를 실행한다 (내 변경이 있을 때만). 테스트가 30초 안쪽일 때만 권장 |
 
 ## 템플릿 수정
 

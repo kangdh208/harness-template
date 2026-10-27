@@ -63,9 +63,24 @@ else {
 if ((Read-Text (Join-Path $Target 'CLAUDE.local.md')) -match '<!-- >>> harness >>> -->') { Report 'OK' 'CLAUDE.local.md' }
 else { Report 'FAIL' 'CLAUDE.local.md' 'harness import block missing' }
 
-# Ignore block
-$ignored = @((Join-Path $Target '.gitignore'), (Join-Path $Target '.git\info\exclude')) | Where-Object { (Read-Text $_) -match '# >>> harness >>>' }
-if ($ignored) { Report 'OK' 'git ignore' ($ignored -join ', ') } else { Report 'WARN' 'git ignore' 'no harness block in .gitignore or .git/info/exclude' }
+# Ignore block: the harness is personal, so it belongs in .git/info/exclude (never committed)
+$inGitignore = (Read-Text (Join-Path $Target '.gitignore')) -match '# >>> harness >>>'
+$inExclude = (Read-Text (Join-Path $Target '.git\info\exclude')) -match '# >>> harness >>>'
+if ($inGitignore) { Report 'WARN' 'git ignore' 'harness block is in .gitignore, visible to teammates (re-run install.ps1 to move it to .git/info/exclude)' }
+elseif ($inExclude) { Report 'OK' 'git ignore' '.git/info/exclude' }
+elseif (Test-Path (Join-Path $Target '.git') -PathType Leaf) { Report 'OK' 'git ignore' 'worktree/submodule: not checked here, see tracked-files check' }
+else { Report 'WARN' 'git ignore' 'no harness block in .gitignore or .git/info/exclude' }
+
+# Harness files already tracked by git would reach teammates on the next push
+$gitExe = (Get-Command git -ErrorAction SilentlyContinue).Source
+if (-not $gitExe -and (Test-Path "$env:ProgramFiles\Git\cmd\git.exe")) { $gitExe = "$env:ProgramFiles\Git\cmd\git.exe" }
+if ($gitExe -and (Test-Path (Join-Path $Target '.git'))) {
+  try {
+    $tracked = @(& $gitExe -C $Target ls-files -- .harness CLAUDE.local.md .claude/settings.local.json '.claude/agents/harness-*' '.claude/skills/harness-*' '.claude/agents/team-*' '.claude/skills/team-*' 2>$null)
+    if ($tracked.Count) { Report 'FAIL' 'tracked' "harness files are tracked by git (teammates get them): $(($tracked | Select-Object -First 5) -join ', ') - untrack with: git rm -r --cached <path>" }
+    else { Report 'OK' 'tracked' 'no harness files in git' }
+  } catch { Report 'WARN' 'tracked' 'could not run git ls-files' }
+}
 
 # Context docs still unfilled
 $unfilled = @(Get-ChildItem (Join-Path $H 'context') -Filter *.md | Where-Object { (Read-Text $_.FullName) -match 'harness:unfilled' } | ForEach-Object { $_.Name })
@@ -100,6 +115,9 @@ if ($missingKeys.Count) { Report 'WARN' 'config' "missing keys: $($missingKeys -
 $empty = @('format', 'lint', 'test' | Where-Object { -not $cfg.$_ })
 if ($empty.Count) { Report 'WARN' 'config' "empty commands: $($empty -join ', ')" } else { Report 'OK' 'config' 'format, lint, test set' }
 if ($cfg.verifyOnStop -and -not $cfg.test) { Report 'WARN' 'config' 'verifyOnStop is true but test is empty' }
+foreach ($k in 'format', 'lint') {
+  if ($cfg.$k -and -not $cfg.$k.Contains('{file}')) { Report 'WARN' 'config' "$k has no {file}: project-wide, so the edit hook skips it (it would touch or judge teammates' code)" }
+}
 
 if ($script:failed) { exit 1 }
 exit 0

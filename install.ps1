@@ -2,12 +2,13 @@
 .SYNOPSIS
   Install (or update) the Claude Code harness into a project. Safe to re-run.
 .EXAMPLE
-  .\install.ps1 -Target "C:\path\to\project"
-  .\install.ps1 -Target . -UseExclude    # ignore via .git/info/exclude instead of .gitignore
+  .\install.ps1 -Target "C:\path\to\project"   # ignore via .git/info/exclude (invisible to teammates)
+  .\install.ps1 -Target . -UseGitignore         # ignore via .gitignore instead (committed, visible)
 #>
 param(
   [string]$Target = (Get-Location).Path,
-  [switch]$UseExclude
+  [switch]$UseGitignore,
+  [switch]$UseExclude   # accepted for old commands; exclude is now the default
 )
 $ErrorActionPreference = 'Stop'
 $Template = $PSScriptRoot
@@ -30,6 +31,32 @@ function Set-Block($path, $begin, $end, $body) {
     $text += "$block`r`n"
   }
   Write-Text $path $text
+}
+
+# Remove a marker-delimited block; delete the file if nothing else is left
+function Remove-Block($path, $begin, $end) {
+  if (-not (Test-Path $path)) { return }
+  $pattern = [regex]::Escape($begin) + '[\s\S]*?' + [regex]::Escape($end) + '\r?\n?'
+  $text = [regex]::Replace((Read-Text $path), $pattern, '')
+  if ($text.Trim()) { Write-Text $path $text } else { Remove-Item $path -Force }
+}
+
+# info/exclude of the repo at $root; handles worktrees/submodules where .git is a file
+function Get-ExcludePath($root) {
+  $dotgit = Join-Path $root '.git'
+  if (Test-Path $dotgit -PathType Container) { return Join-Path $dotgit 'info\exclude' }
+  if ((Test-Path $dotgit -PathType Leaf) -and ((Read-Text $dotgit) -match 'gitdir:\s*(.+)')) {
+    $gd = $Matches[1].Trim()
+    if (-not [IO.Path]::IsPathRooted($gd)) { $gd = Join-Path $root $gd }
+    # Worktrees read info/exclude from the main repo's git dir
+    $common = Join-Path $gd 'commondir'
+    if (Test-Path $common) {
+      $c = (Read-Text $common).Trim()
+      $gd = if ([IO.Path]::IsPathRooted($c)) { $c } else { Join-Path $gd $c }
+    }
+    return Join-Path $gd 'info\exclude'
+  }
+  return $null
 }
 
 function Test-HarnessEntry($entry) { ($entry | ConvertTo-Json -Depth 20 -Compress) -match '\.harness/hooks/' }
@@ -124,7 +151,8 @@ $imports = @(
 ) -join "`r`n"
 Set-Block (Join-Path $Target 'CLAUDE.local.md') '<!-- >>> harness >>> -->' '<!-- <<< harness <<< -->' $imports
 
-# 5. Keep harness files out of git
+# 5. Keep harness files out of git. Default is .git/info/exclude: it is never committed,
+#    so teammates see no trace of a harness only I use.
 $ignoreLines = @(
   '.harness/',
   'CLAUDE.local.md',
@@ -134,14 +162,21 @@ $ignoreLines = @(
   '.claude/agents/team-*',
   '.claude/skills/team-*'
 ) -join "`r`n"
-$ignorePath = Join-Path $Target '.gitignore'
-if ($UseExclude) {
-  $gitDir = Join-Path $Target '.git'
-  if (Test-Path $gitDir -PathType Container) {
-    $ignorePath = Join-Path $gitDir 'info\exclude'
+$gitignorePath = Join-Path $Target '.gitignore'
+$ignorePath = $gitignorePath
+$gitignoreBlockRemoved = $false
+if (-not $UseGitignore) {
+  $excludePath = Get-ExcludePath $Target
+  if ($excludePath) {
+    $ignorePath = $excludePath
     New-Item -ItemType Directory -Force (Split-Path $ignorePath) | Out-Null
+    # Older versions wrote the block to .gitignore, where teammates see it: move it out
+    if ((Read-Text $gitignorePath).Contains('# >>> harness >>>')) {
+      Remove-Block $gitignorePath '# >>> harness >>>' '# <<< harness <<<'
+      $gitignoreBlockRemoved = $true
+    }
   } else {
-    Write-Warning "No .git directory found; falling back to .gitignore"
+    Write-Warning "Not a git repository; using .gitignore"
   }
 }
 Set-Block $ignorePath '# >>> harness >>>' '# <<< harness <<<' $ignoreLines
@@ -153,5 +188,6 @@ Write-Host "TARGET: $Target"
 Write-Host "ADDED_FILES: $($addedFiles -join ', ')"
 Write-Host "CONFIG_KEYS_ADDED: $($addedKeys -join ', ')"
 Write-Host "IGNORE: $ignorePath"
+if ($gitignoreBlockRemoved) { Write-Host "GITIGNORE_BLOCK_REMOVED: yes (.gitignore changed; this change is visible to teammates)" }
 Write-Host "UNFILLED_CONTEXT: $($unfilled -join ', ')"
 Write-Host "Done. Restart the Claude Code session (or start a new one) to load the harness."

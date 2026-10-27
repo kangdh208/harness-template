@@ -1,5 +1,7 @@
 # PostToolUse hook: run format/lint from harness.config.json on the edited file.
 # Exit 2 + stderr feeds lint errors back to Claude.
+# Only file-scoped commands ({file}) run here: a project-wide format would rewrite
+# teammates' files, and a project-wide lint would block on their errors.
 $ErrorActionPreference = 'Stop'
 $harness = Split-Path $PSScriptRoot -Parent
 $root = Split-Path $harness -Parent
@@ -21,9 +23,9 @@ function Invoke-Configured($template) {
   return @{ Code = $code; Output = ($out | Out-String) }
 }
 
-if ($config.format) { Invoke-Configured $config.format | Out-Null }
+if ($config.format -and $config.format.Contains('{file}')) { Invoke-Configured $config.format | Out-Null }
 
-if ($config.lint) {
+if ($config.lint -and $config.lint.Contains('{file}')) {
   $r = Invoke-Configured $config.lint
   if ($r.Code -ne 0) {
     $tail = ($r.Output -split "`n" | Select-Object -Last 60) -join "`n"

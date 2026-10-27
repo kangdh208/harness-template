@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.0 — 2026-10-27
+
+하네스는 나만 쓰고 프로젝트는 팀이 함께 진행하는 환경에 맞췄다. 하네스는 내 변경에만 작동한다.
+
+### 변경
+- ignore 기본 위치를 `.git/info/exclude` 로 바꿨다 (커밋되지 않아 팀에 보이지 않음). `.gitignore` 는 `-UseGitignore` 를 붙일 때만 쓴다. `-UseExclude` 는 예전 명령 호환용으로 남겼다.
+- 업데이트할 때 예전 버전이 `.gitignore` 에 넣은 하네스 블록을 exclude로 옮긴다 (`GITIGNORE_BLOCK_REMOVED`).
+- worktree·submodule(`.git` 이 파일인 경우)의 exclude 경로를 찾는다.
+- 편집 훅: `{file}` 이 없는 format·lint는 실행하지 않는다. 프로젝트 전체 format은 팀원 파일을 바꾸고, 전체 lint는 팀원 코드의 오류로 작업을 막기 때문이다.
+- 종료 훅: 작업 트리에 변경이 없으면 건너뛴다. 실패하면 내 변경 파일 목록을 함께 전달하고, 팀원 코드의 실패는 고치지 말고 보고하라고 지시한다.
+- HARNESS.md: "내 작업 범위"(작업 트리 + push하지 않은 커밋)와 "Git" 규칙(요청 시에만 커밋·push, 공유 브랜치 직접 push 금지, force push·`--no-verify` 금지, staged 목록 확인, 커밋 계정 확인)을 추가했다.
+- verify / reviewer / tester: 내 변경만 검증·검토한다. 범위 밖 실패는 따로 보고하고 고치지 않는다. planner는 팀원 코드를 바꿔야 하는 단계를 위험 요소로 표시한다.
+- doctor.ps1: `.gitignore` 에 남은 블록(팀에 보임), git에 추적되는 하네스 파일(FAIL), `{file}` 없는 format·lint를 점검한다.
+- 전역 스킬: 등록할 때 저장소의 커밋 계정을 확인해 보고한다.
+
 ## 2.1.0 — 2026-10-26
 
 하네스를 "공통 기반 + 도메인 팀" 두 층으로 나눴다. 대도메인 AI Agent 안의 세부 유형을 인터뷰해 프로젝트 전용 에이전트 팀을 만든다.
